@@ -1,26 +1,45 @@
 import argparse
 import pathlib
+import subprocess
 import sys
 from dataclasses import dataclass, field
-from enum import Enum, auto
+from enum import Enum
 from typing import List, Optional
 
 import yaml
+from colorama import Fore, Style
+
+import custom_io as io
+from prettify import decorate, pretty_assert
 
 
 class OutputMode(Enum):
     """
-    The way the output is tested.
+    The way the output is tested
     They are currently two possible modes:
         - strict: Compare the output with the expected result.
-                  If their is are not the same, stop the test.
+                  If their is are not the same, stop the test
         - exists: Fail if their is an expected output but the tested binary
                   outputs nothing, or if the tested outputs something but
                   nothing was expected.
     """
 
-    STRICT = auto(),
-    EXISTS = auto(),
+    STRICT = 'strict',
+    EXISTS = 'exists',
+
+    def compare_outputs(self, expected: str, actual: str) -> bool:
+        """
+        Compare outputs according to the output mode
+
+        :param expected: The expected output
+        :param actual: The actual output
+        :return: Returns `True` if the comparison succeeds, `False` instead
+        """
+
+        if self.value == 'exists':
+            return (expected == '') == (actual == '')
+
+        return expected == actual
 
 
 @dataclass
@@ -30,18 +49,24 @@ class TestCase:
 
     Arguments
     ---------
-        args            The arguments passed to the executable
+        name            The name of the test case
+        args            (optional) The arguments passed to the executable
         ref             (optional) Path to a binary with the expected outputs
+        stdin           (optional) String to pass in the standard input
         stdout          (optional) The expected standard output
         stderr          (optional) The expected standard error
         exit_code       (optional) The expected exit code
-        stdout_mode     See `OutputMode` - Default value: STRICT
-        stderr_mode     See `OutputMode` - Default value: STRICT
+        stdout_mode     See `OutputMode` - defaults to STRICT
+        stderr_mode     See `OutputMode` - defaults STRICT
+        skipped         (optional) Indicates if the test is ignored
     """
 
-    args: str
-    ref: Optional[pathlib.Path] = None
+    name: str
 
+    args: List[str] = field(default_factory=lambda: [])
+    ref: str = None
+
+    stdin: Optional[str] = None
     stdout: Optional[str] = None
     stderr: Optional[str] = None
     exit_code: Optional[int] = None
@@ -49,11 +74,84 @@ class TestCase:
     stdout_mode: OutputMode = OutputMode.STRICT
     stderr_mode: OutputMode = OutputMode.STRICT
 
+    skipped: bool = False
+
     def __post_init__(self):
         if isinstance(self.stdout_mode, str):
             self.stderr_mode = OutputMode[self.stdout_mode.upper()]
         if isinstance(self.stderr_mode, str):
             self.stderr_mode = OutputMode[self.stderr_mode.upper()]
+
+        # The ref overrides undefined outputs
+        if self.ref is not None:
+            ref = pathlib.Path(self.ref).resolve()
+            process = subprocess.Popen(
+                [ref.name, *self.args],
+                stdin=subprocess.PIPE if self.stdin is not None else None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+            if self.stdin is not None:
+                process.stdin.write(self.stdin.encode())
+                process.stdin.close()
+            process.wait()
+
+            self.stdout = process.stdout.read().decode() \
+                if self.stdout is None else self.stdout
+            self.stderr = process.stderr.read().decode() \
+                if self.stderr is None else self.stderr
+            self.exit_code = process.returncode \
+                if self.exit_code is None else self.exit_code
+
+    def run(self, binary: pathlib.Path) -> bool:
+        """
+        Run the test case
+
+        :param binary: Path to the tested executable
+        :return: Returns `True` if everything passes, `False` instead
+        """
+
+        process = subprocess.Popen(
+            [binary, *self.args],
+            stdin=subprocess.PIPE if self.stdin is not None else None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        if self.stdin is not None:
+            process.stdin.write(self.stdin.encode())
+            process.stdin.close()
+        process.wait()
+
+        stdout = process.stdout.read().decode()
+        stderr = process.stderr.read().decode()
+        exit_code = process.returncode
+
+        passing = True
+
+        if self.stdout is not None:
+            passing = passing and pretty_assert(
+                'standard outputs',
+                actual=stdout,
+                expected=self.stdout,
+                compare=self.stdout_mode.compare_outputs
+            )
+        if self.stderr is not None:
+            passing = passing and pretty_assert(
+                'standard errors',
+                actual=stderr,
+                expected=self.stderr,
+                compare=self.stderr_mode.compare_outputs
+            )
+
+        passing = passing and pretty_assert(
+            'exit codes',
+            actual=exit_code,
+            expected=self.exit_code,
+            compare=lambda actual, expected: actual == expected,
+            type=int
+        )
+
+        return passing
 
 
 @dataclass
@@ -72,7 +170,31 @@ class TestSuite:
 
     def add_test(self, test: TestCase):
         """Add a test case at the end of the test suite."""
+
         self.tests.append(test)
+
+    def run(self):
+        """Run all the tests in the testsuite"""
+
+        total = len(self.tests)
+        for no, test in enumerate(self.tests):
+            print(f'{no + 1}/{total}', decorate(test.name, Style.BRIGHT),
+                  end='\t\t')
+
+            if test.skipped:
+                print(decorate('SKIPPED', Style.BRIGHT, Fore.BLUE))
+                continue
+
+            io.disable_stdout()
+            success = test.run(self.exec)
+            test_output = sys.stdout.read()
+            io.enable_stdout()
+
+            if success:
+                print(decorate('OK', Style.BRIGHT, Fore.LIGHTGREEN_EX))
+            else:
+                print(decorate('KO', Style.BRIGHT, Fore.LIGHTRED_EX))
+                print(test_output)
 
 
 def get_testsuite() -> TestSuite:
@@ -96,7 +218,7 @@ def get_testsuite() -> TestSuite:
         try:
             test_suite = yaml.safe_load(file)
             for test in test_suite:
-                test_case = TestCase(**test_suite[test])
+                test_case = TestCase(name=test, **test_suite[test])
                 testsuite.add_test(test_case)
         except yaml.YAMLError as error:
             print(error, file=sys.stderr)
