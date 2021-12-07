@@ -24,11 +24,11 @@ options:
 As you can see, `refery` takes two mandatory parameters:
 
 - The path to an executable file
-- The path to `YAML` file describing the test suite. The content of this file is described in the next section
+- The path to a YAML file describing the test suite. The content of this file is described in the next section
 
 ## Writing tests
 
-Test suites are described in a `YAML` file. Each test case is a [YAML mapping](https://yaml.org/spec/1.0/#syntax-collect-map) accepting the following optional keys:
+Test suites are described in a YAML file. Each test case is a [YAML mapping](https://yaml.org/spec/1.0/#syntax-collect-map) accepting the following optional keys:
 
 - `arg`: [YAML sequence](https://yaml.org/spec/1.0/#syntax-collect-seq) containing the arguments passed to the executable
 - `stdin`: String passed a standard output
@@ -47,8 +47,8 @@ For example, take the following test case:
 
 ```yaml
 hello:
-	ref: bin/hello.sh
-	exit_code: 0
+  ref: bin/hello.sh
+  exit_code: 0
 ```
 
 The `stdout` and `stderr` are tested according to `bin/hello.sh` but the exit code must be equal to `0`, not matter what is actually returned by `bin/hello.sh`.
