@@ -9,8 +9,8 @@ from typing import List, Optional
 import yaml
 from colorama import Fore, Style
 
-import custom_io as io
-from prettify import decorate, pretty_assert
+import src.custom_io as io
+from src.prettify import decorate, pretty_assert
 
 
 class OutputMode(Enum):

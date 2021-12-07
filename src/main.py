@@ -1,4 +1,4 @@
-from test_suite import get_testsuite
+from src.test_suite import get_testsuite
 
 
 def main():
