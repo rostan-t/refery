@@ -169,14 +169,19 @@ class TestSuite:
     tests: List[TestCase] = field(default_factory=lambda: [])
 
     def add_test(self, test: TestCase):
-        """Add a test case at the end of the test suite."""
+        """Add a test case at the end of the test suite"""
 
         self.tests.append(test)
 
     def run(self):
-        """Run all the tests in the testsuite"""
+        """
+        Run all the tests in the testsuite
+
+        :return: Returns 0 if all tests succeeded, else 1
+        """
 
         total = len(self.tests)
+        exit_code = 0
         for no, test in enumerate(self.tests):
             print(f'{no + 1}/{total}', decorate(test.name, Style.BRIGHT),
                   end='\t\t')
@@ -195,6 +200,8 @@ class TestSuite:
             else:
                 print(decorate('KO', Style.BRIGHT, Fore.LIGHTRED_EX))
                 print(test_output)
+                exit_code = 1
+        return exit_code
 
 
 def get_testsuite() -> TestSuite:

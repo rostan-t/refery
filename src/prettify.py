@@ -9,14 +9,14 @@ def __get_diff_color(line: str) -> Optional[AnsiCodes]:
         return Fore.GREEN
     elif line.startswith('-'):
         return Fore.RED
-    elif line.startswith('^'):
+    elif line.startswith('@'):
         return Fore.BLUE
     else:
         return None
 
 
-def decorate(input: str, *decorations: Iterable[AnsiCodes]) -> str:
-    if len(decorations) == 0:
+def decorate(input: str, *decorations: Optional[Iterable[AnsiCodes]]) -> str:
+    if decorations is None or len(decorations) == 0:
         return input
 
     prefix = ''.join(map(str, decorations))
@@ -34,7 +34,6 @@ def __pretty_diff(actual: str, expected: str) -> str:
         tofile='expected',
         lineterm='',
     )
-    diff_lines = list(diff_lines)
     colored_lines = [
         decorate(line, __get_diff_color(line)) for line in diff_lines
     ]

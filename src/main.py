@@ -1,10 +1,10 @@
 from src.test_suite import get_testsuite
 
 
-def main():
+def main() -> int:
     testsuite = get_testsuite()
-    testsuite.run()
+    return testsuite.run()
 
 
 if __name__ == '__main__':
-    main()
+    exit(main())
