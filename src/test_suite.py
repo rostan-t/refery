@@ -36,7 +36,7 @@ class OutputMode(Enum):
         :return: Returns `True` if the comparison succeeds, `False` instead
         """
 
-        if self.value == 'exists':
+        if self.value[0] == 'exists':
             return (expected == '') == (actual == '')
 
         return expected == actual
