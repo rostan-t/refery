@@ -19,7 +19,7 @@ def decorate(input: str, *decorations: Optional[Iterable[AnsiCodes]]) -> str:
     if decorations is None or len(decorations) == 0:
         return input
 
-    prefix = ''.join(map(str, decorations))
+    prefix = ''.join(map(str, filter(lambda dec: dec is not None, decorations)))
     return f'{prefix}{input}{Fore.RESET}{Style.RESET_ALL}'
 
 
@@ -63,10 +63,11 @@ def pretty_assert(name: str, actual: T, expected: T,
     if compare(actual, expected):
         return True
 
-    print(f'Different {name}:', end='')
+    print(f'Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: ', end='')
 
     if type is str:
         print()
         print(__pretty_diff(actual=actual, expected=expected))
     else:
-        print(f'expected {expected}, got {actual}')
+        print(f'expected {decorate(expected, Fore.GREEN)}'
+              f', got {decorate(actual, Fore.RED)}')
