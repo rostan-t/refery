@@ -1,5 +1,5 @@
 from difflib import unified_diff
-from typing import Optional, Callable, TypeVar, Type, Iterable
+from typing import Optional, Callable, TypeVar, Type, Iterable, IO
 
 from colorama.ansi import AnsiCodes, Fore, Style
 
@@ -71,3 +71,13 @@ def pretty_assert(name: str, actual: T, expected: T,
     else:
         print(f'expected {decorate(expected, Fore.GREEN)}'
               f', got {decorate(actual, Fore.RED)}')
+
+
+__print = print
+
+
+def print(*args, sep: Optional[str] = ' ', end: Optional[str] = '\n',
+          file: Optional[IO] = None, flush: bool = False,
+          decorations: Iterable[AnsiCodes] = ()):
+    __print(*map(lambda arg: decorate(arg, *decorations), args),
+            sep=sep, end=end, file=file, flush=flush)

@@ -10,7 +10,7 @@ import yaml
 from colorama import Fore, Style
 
 import src.custom_io as io
-from src.prettify import decorate, pretty_assert
+from src.prettify import decorate, pretty_assert, print
 
 
 class OutputMode(Enum):
@@ -103,6 +103,24 @@ class TestCase:
             self.exit_code = process.returncode \
                 if self.exit_code is None else self.exit_code
 
+    @staticmethod
+    def _print_command(name: str, args: List[str],
+                       label: Optional[str] = None):
+        """
+        Print a command execution
+
+        :param name: Name of the command
+        :param args: Arguments passed to the command
+        :param label: Optional string to print at the end
+        """
+
+        decorations = (Style.DIM,)
+        print('$', name, end='\t', decorations=decorations)
+        if len(args) != 0:
+            print(end=' ')
+            escaped = [arg if ' ' not in arg else f'"{arg}"' for arg in args]
+            print(' '.join(escaped), decorations=decorations)
+
     def run(self, binary: pathlib.Path) -> bool:
         """
         Run the test case
@@ -120,6 +138,12 @@ class TestCase:
         if self.stdin is not None:
             process.stdin.write(self.stdin.encode())
             process.stdin.close()
+
+        print('testing:', decorations=(Style.DIM,))
+        self._print_command(binary.name, self.args)
+        if self.ref is not None:
+            print('against:', decorations=(Style.DIM,))
+            self._print_command(self.ref, self.args)
         process.wait()
 
         stdout = process.stdout.read().decode()
