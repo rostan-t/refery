@@ -53,12 +53,13 @@ class TestCase:
         args            (optional) The arguments passed to the executable
         ref             (optional) Path to a binary with the expected outputs
         stdin           (optional) String to pass in the standard input
-        stdout          (optional) The expected standard output
-        stderr          (optional) The expected standard error
-        exit_code       (optional) The expected exit code
+        stdout          (optional) Expected standard output
+        stderr          (optional) Expected standard error
+        exit_code       (optional) Expected exit code
         stdout_mode     See `OutputMode` - defaults to STRICT
         stderr_mode     See `OutputMode` - defaults STRICT
         skipped         (optional) Indicates if the test is ignored
+        timeout         (optional) Timeout in seconds
     """
 
     name: str
@@ -75,6 +76,7 @@ class TestCase:
     stderr_mode: OutputMode = OutputMode.STRICT
 
     skipped: bool = False
+    timeout: Optional[float] = None
 
     def __post_init__(self):
         if isinstance(self.stdout_mode, str):
@@ -104,14 +106,12 @@ class TestCase:
                 if self.exit_code is None else self.exit_code
 
     @staticmethod
-    def _print_command(name: str, args: List[str],
-                       label: Optional[str] = None):
+    def _print_command(name: str, args: List[str]):
         """
         Print a command execution
 
         :param name: Name of the command
         :param args: Arguments passed to the command
-        :param label: Optional string to print at the end
         """
 
         decorations = (Style.DIM,)
@@ -144,7 +144,12 @@ class TestCase:
         if self.ref is not None:
             print('against:', decorations=(Style.DIM,))
             self._print_command(self.ref, self.args)
-        process.wait()
+
+        try:
+            process.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            print('⏱  TIMEOUT', decorations=(Style.BRIGHT, Fore.RED))
+            return False
 
         stdout = process.stdout.read().decode()
         stderr = process.stderr.read().decode()
