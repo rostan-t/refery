@@ -148,7 +148,8 @@ class TestCase:
         try:
             process.wait(timeout=self.timeout)
         except subprocess.TimeoutExpired:
-            print('⏱  TIMEOUT', decorations=(Style.BRIGHT, Fore.RED))
+            print('⏱  sh'
+                  'TIMEOUT', decorations=(Style.BRIGHT, Fore.RED))
             return False
 
         stdout = process.stdout.read().decode()
