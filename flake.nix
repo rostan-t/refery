@@ -14,10 +14,7 @@
             pname = "refery";
             version = "1.0.2";
 
-            src = pkgs.python39Packages.fetchPypi {
-              inherit pname version;
-              sha256 = "5c658b424d5db3fd0349760d10a9cd3eb1a7acb974946ec1473fdc4eb923cd4b";
-            };
+            src = ./.;
 
             doCheck = false;
             propagatedBuildInputs = [ pkgs.python39.pkgs.colorama pkgs.python39.pkgs.pyaml];
