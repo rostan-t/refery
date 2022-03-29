@@ -51,6 +51,7 @@ class TestCase:
 
     Arguments
     ---------
+        binary          Path to the tested binary
         name            The name of the test case
         args            (optional) The arguments passed to the executable
         ref             (optional) Path to a binary with the expected outputs
@@ -254,7 +255,7 @@ class TestSuite:
         return exit_code
 
 
-def get_testsuite() -> List[TestSuite]:
+def get_testsuites() -> List[TestSuite]:
     """
     Read the arguments from the command line and generate a test suite.
 
@@ -269,8 +270,7 @@ def get_testsuite() -> List[TestSuite]:
 
     cmd_args = parser.parse_args()
 
-    # 2- Setup the tests
-
+    # 2- Read the YAML file
     with open(cmd_args.test_file.resolve(), 'r') as file:
         try:
             yaml_content = yaml.safe_load(file)
@@ -278,6 +278,7 @@ def get_testsuite() -> List[TestSuite]:
             print(error, file=sys.stderr)
             exit(1)
 
+    # 3- Setup the tests
     testsuites = []
     defaults = yaml_content['default']
     for yaml_testsuite in yaml_content['testsuites']:
