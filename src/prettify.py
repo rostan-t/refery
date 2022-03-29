@@ -74,6 +74,8 @@ def pretty_assert(name: str, actual: T, expected: T,
         print(f'expected {decorate(expected, Fore.GREEN)}'
               f', got {decorate(actual, Fore.RED)}')
 
+    return False
+
 
 __print = print
 

@@ -221,8 +221,10 @@ class TestSuite:
         total = len(self.tests)
         exit_code = 0
         for no, test in enumerate(self.tests):
+            # used to align everything
+            max_name_length = max(len(test.name) for test in self.tests)
             print(f'{no + 1}/{total}', decorate(test.name, Style.BRIGHT),
-                  end='\t\t')
+                  end=f'{" " * (max_name_length - len(test.name))}\t')
 
             if test.skipped:
                 print(decorate('SKIPPED', Style.BRIGHT, Fore.BLUE))
