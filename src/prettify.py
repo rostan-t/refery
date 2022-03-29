@@ -4,7 +4,7 @@ from typing import Optional, Callable, TypeVar, Type, Iterable, IO
 from colorama.ansi import AnsiCodes, Fore, Style
 
 
-def __get_diff_color(line: str) -> Optional[AnsiCodes]:
+def __get_diff_color(line: str) -> Optional[str]:
     if line.startswith('+'):
         return Fore.GREEN
     elif line.startswith('-'):
@@ -23,7 +23,7 @@ def decorate(input: str, *decorations: Optional[Iterable[AnsiCodes]]) -> str:
     return f'{prefix}{input}{Fore.RESET}{Style.RESET_ALL}'
 
 
-def __pretty_diff(actual: str, expected: str) -> str:
+def pretty_diff(actual: str, expected: str) -> str:
     actual_lines = actual.replace('\n', '↵\n').splitlines()
     expected_lines = expected.replace('\n', '↵\n').splitlines()
 
@@ -45,7 +45,8 @@ T = TypeVar('T')
 
 
 def pretty_assert(name: str, actual: T, expected: T,
-                  compare: Callable[[T, T], bool], type: Type = str) -> bool:
+                  compare: Callable[[T, T], Optional[str]],
+                  type: Type = str) -> bool:
     """
     Execute the `compare` function on `actual` and `expected`
     and pretty-print a report.
@@ -60,14 +61,15 @@ def pretty_assert(name: str, actual: T, expected: T,
     :return: The value of the compare function applied to actual and expected
     """
 
-    if compare(actual, expected):
+    msg = compare(actual, expected)
+    if msg is None:
         return True
 
-    print(f'Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: ', end='')
+    print(f'Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: {msg}')
 
     if type is str:
         print()
-        print(__pretty_diff(actual=actual, expected=expected))
+        print(pretty_diff(actual=actual, expected=expected))
     else:
         print(f'expected {decorate(expected, Fore.GREEN)}'
               f', got {decorate(actual, Fore.RED)}')
@@ -78,6 +80,6 @@ __print = print
 
 def print(*args, sep: Optional[str] = ' ', end: Optional[str] = '\n',
           file: Optional[IO] = None, flush: bool = False,
-          decorations: Iterable[AnsiCodes] = ()):
+          decorations: Iterable[str] = ()):
     __print(*map(lambda arg: decorate(arg, *decorations), args),
             sep=sep, end=end, file=file, flush=flush)

@@ -7,11 +7,12 @@ HERE = pathlib.Path(__file__).parent
 README = (HERE / 'README.md').read_text()
 
 NAME = 'refery'
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 DESCRIPTION = 'Functional testing tool'
 AUTHOR = 'Rostan Tabet'
 EMAIL = 'rostan.tabet@gmail.com'
 REQUIRED = ['PyYAML', 'colorama']
+URL = 'https://github.com/RostanTabet/refery'
 
 setup(
     name=NAME,
@@ -19,6 +20,7 @@ setup(
     description=DESCRIPTION,
     author=AUTHOR,
     author_email=EMAIL,
+    url=URL,
     packages=['src'],
     install_requires=REQUIRED,
     long_description_content_type='text/markdown',

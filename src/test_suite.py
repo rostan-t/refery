@@ -10,7 +10,7 @@ import yaml
 from colorama import Fore, Style
 
 import src.custom_io as io
-from src.prettify import decorate, pretty_assert, print
+from src.prettify import print, decorate, pretty_assert, pretty_diff
 
 
 class OutputMode(Enum):
@@ -27,19 +27,21 @@ class OutputMode(Enum):
     STRICT = 'strict',
     EXISTS = 'exists',
 
-    def compare_outputs(self, expected: str, actual: str) -> bool:
+    def compare_outputs(self, expected: str, actual: str) -> Optional[str]:
         """
-        Compare outputs according to the output mode
+        Compare strings according to the output mode.
 
-        :param expected: The expected output
-        :param actual: The actual output
-        :return: Returns `True` if the comparison succeeds, `False` instead
+        :param expected: The expected output.
+        :param actual: The actual output.
+        :return: Returns string containing the reason for failure if the comparison fails, else <code>None</code>.
         """
 
         if self.value[0] == 'exists':
-            return (expected == '') == (actual == '')
+            return 'expected nothing, got something' if expected == '' and actual != '' \
+                else 'expected something, got nothing' if expected != '' and actual == '' \
+                else None
 
-        return expected == actual
+        return None if expected == actual else pretty_diff(actual, expected)
 
 
 @dataclass
@@ -88,7 +90,7 @@ class TestCase:
         if self.ref is not None:
             ref = pathlib.Path(self.ref).resolve()
             process = subprocess.Popen(
-                [ref.name, *self.args],
+                [ref, *self.args],
                 stdin=subprocess.PIPE if self.stdin is not None else None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
@@ -156,29 +158,35 @@ class TestCase:
         stderr = process.stderr.read().decode()
         exit_code = process.returncode
 
+        return self.__run_assertions(stdout, stderr, exit_code)
+
+    def __run_assertions(self, stdout: str, stderr: str,
+                         exit_code: int) -> bool:
         passing = True
 
+        # I use & instead of `and` because I don't want any assertion skipped
         if self.stdout is not None:
-            passing = passing and pretty_assert(
+            passing &= pretty_assert(
                 'standard outputs',
                 actual=stdout,
                 expected=self.stdout,
                 compare=self.stdout_mode.compare_outputs
             )
         if self.stderr is not None:
-            passing = passing and pretty_assert(
+            passing &= pretty_assert(
                 'standard errors',
                 actual=stderr,
                 expected=self.stderr,
                 compare=self.stderr_mode.compare_outputs
             )
 
-        passing = passing and pretty_assert(
+        passing &= pretty_assert(
             'exit codes',
             actual=exit_code,
             expected=self.exit_code,
-            compare=lambda actual, expected: actual == expected,
-            type=int
+            compare=lambda actual, expected: None if actual == expected
+            else f'expected {decorate(expected, Fore.GREEN)}, '
+                 f'got {decorate(actual, Fore.RED)}'
         )
 
         return passing
