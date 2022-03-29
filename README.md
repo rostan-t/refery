@@ -30,7 +30,7 @@ As you can see, `refery` takes two mandatory parameters:
 
 Test suites are described in a YAML file. Each test case is a [YAML mapping](https://yaml.org/spec/1.0/#syntax-collect-map) accepting the following optional keys:
 
-- `arg`: [YAML sequence](https://yaml.org/spec/1.0/#syntax-collect-seq) containing the arguments passed to the executable
+- `args`: [YAML sequence](https://yaml.org/spec/1.0/#syntax-collect-seq) containing the arguments passed to the executable
 - `stdin`: String passed a standard output
 - `ref`: Path to an executable with the desired behaviour
 - `stdout`: Expected standard output
