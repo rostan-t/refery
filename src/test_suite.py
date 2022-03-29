@@ -64,6 +64,7 @@ class TestCase:
         timeout         (optional) Timeout in seconds
     """
 
+    binary: pathlib.Path
     name: str
 
     args: List[str] = field(default_factory=lambda: [])
@@ -81,6 +82,8 @@ class TestCase:
     timeout: Optional[float] = None
 
     def __post_init__(self):
+        if isinstance(self.binary, str):
+            self.binary = pathlib.Path(self.binary).resolve()
         if isinstance(self.stdout_mode, str):
             self.stderr_mode = OutputMode[self.stdout_mode.upper()]
         if isinstance(self.stderr_mode, str):
@@ -123,16 +126,16 @@ class TestCase:
             escaped = [arg if ' ' not in arg else f'"{arg}"' for arg in args]
             print(' '.join(escaped), decorations=decorations)
 
-    def run(self, binary: pathlib.Path) -> bool:
+    def run(self, verbose: bool) -> bool:
         """
-        Run the test case
+        Run the test case.
 
-        :param binary: Path to the tested executable
+        :param verbose: `True` if the output must be verbose
         :return: Returns `True` if everything passes, `False` instead
         """
 
         process = subprocess.Popen(
-            [binary, *self.args],
+            [self.binary, *self.args],
             stdin=subprocess.PIPE if self.stdin is not None else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -141,11 +144,12 @@ class TestCase:
             process.stdin.write(self.stdin.encode())
             process.stdin.close()
 
-        print('testing:', decorations=(Style.DIM,))
-        self._print_command(binary.name, self.args)
-        if self.ref is not None:
-            print('against:', decorations=(Style.DIM,))
-            self._print_command(self.ref, self.args)
+        if verbose:
+            print('testing:', decorations=(Style.DIM,))
+            self._print_command(self.binary.name, self.args)
+            if self.ref is not None:
+                print('against:', decorations=(Style.DIM,))
+                self._print_command(self.ref, self.args)
 
         try:
             process.wait(timeout=self.timeout)
@@ -179,15 +183,15 @@ class TestCase:
                 expected=self.stderr,
                 compare=self.stderr_mode.compare_outputs
             )
-
-        passing &= pretty_assert(
-            'exit codes',
-            actual=exit_code,
-            expected=self.exit_code,
-            compare=lambda actual, expected: None if actual == expected
-            else f'expected {decorate(expected, Fore.GREEN)}, '
-                 f'got {decorate(actual, Fore.RED)}'
-        )
+        if self.exit_code is not None:
+            passing &= pretty_assert(
+                'exit codes',
+                actual=exit_code,
+                expected=self.exit_code,
+                compare=lambda actual, expected: None if actual == expected
+                else f'expected {decorate(expected, Fore.GREEN)}, '
+                     f'got {decorate(actual, Fore.RED)}'
+            )
 
         return passing
 
@@ -195,16 +199,20 @@ class TestCase:
 @dataclass
 class TestSuite:
     """
-    A simple test suite
+    A simple test suite containing test cases.
 
     Arguments
     ---------
-        exec    Path to the tested executable
-        tests   List of test cases
+        name     Name of the test suite.
+        tests    List of test cases.
+        fatal    Indicates if a failure in a test case means an abortion of the runner - defaults to false.
+        verbose  Indicates if the output must be verbose - defaults to false.
     """
 
-    exec: pathlib.Path
+    name: str
     tests: List[TestCase] = field(default_factory=lambda: [])
+    fatal: bool = False
+    verbose: bool = False
 
     def add_test(self, test: TestCase):
         """Add a test case at the end of the test suite"""
@@ -231,7 +239,7 @@ class TestSuite:
                 continue
 
             io.disable_stdout()
-            success = test.run(self.exec)
+            success = test.run(self.verbose)
             test_output = sys.stdout.read()
             io.enable_stdout()
 
@@ -240,11 +248,13 @@ class TestSuite:
             else:
                 print(decorate('KO', Style.BRIGHT, Fore.LIGHTRED_EX))
                 print(test_output)
+                if self.fatal:
+                    raise InterruptedError()
                 exit_code = 1
         return exit_code
 
 
-def get_testsuite() -> TestSuite:
+def get_testsuite() -> List[TestSuite]:
     """
     Read the arguments from the command line and generate a test suite.
 
@@ -253,22 +263,26 @@ def get_testsuite() -> TestSuite:
 
     # 1- Parse the command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exec', type=pathlib.Path, required=True,
-                        help='path to the tested executable')
     parser.add_argument('--test-file', type=pathlib.Path, required=True,
                         help='path to the yaml test file')
+    parser.add_argument('--verbose', type=bool, required=False, default=False)
+
     cmd_args = parser.parse_args()
 
     # 2- Setup the tests
-    testsuite = TestSuite(exec=cmd_args.exec.resolve())
+
     with open(cmd_args.test_file.resolve(), 'r') as file:
         try:
-            test_suite = yaml.safe_load(file)
-            for test in test_suite:
-                test_case = TestCase(name=test, **test_suite[test])
-                testsuite.add_test(test_case)
+            yaml_content = yaml.safe_load(file)
         except yaml.YAMLError as error:
             print(error, file=sys.stderr)
             exit(1)
 
-    return testsuite
+    testsuites = []
+    defaults = yaml_content['default']
+    for yaml_testsuite in yaml_content['testsuites']:
+        yaml_testsuite['tests'] = [TestCase(**(defaults | test)) for test in yaml_testsuite['tests']]
+        testsuite = TestSuite(**yaml_testsuite)
+        testsuites.append(testsuite)
+
+    return testsuites
