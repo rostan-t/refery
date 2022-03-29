@@ -1,4 +1,5 @@
 import argparse
+import enum
 import pathlib
 import subprocess
 import sys
@@ -42,6 +43,18 @@ class OutputMode(Enum):
                 else None
 
         return None if expected == actual else pretty_diff(actual, expected)
+
+
+class TestResult(enum.Enum):
+    """
+    Result of a test case.
+    - SUCCESS indicates that the test was successful.
+    - FAILURE indicates that the test failed.
+    - ERROR indicates that an internal error occured.
+    """
+    SUCCESS = 'ok'
+    FAILURE = 'ko'
+    ERROR = 'error'
 
 
 @dataclass
@@ -127,20 +140,26 @@ class TestCase:
             escaped = [arg if ' ' not in arg else f'"{arg}"' for arg in args]
             print(' '.join(escaped), decorations=decorations)
 
-    def run(self, verbose: bool) -> bool:
+    def run(self, verbose: bool) -> TestResult:
         """
         Run the test case.
 
-        :param verbose: `True` if the output must be verbose
-        :return: Returns `True` if everything passes, `False` instead
+        :param verbose: True if the output must be verbose.
+        :return: A <code>TestResult</code> representing the outcome of the test.
         """
 
-        process = subprocess.Popen(
-            [self.binary, *self.args],
-            stdin=subprocess.PIPE if self.stdin is not None else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        try:
+            process = subprocess.Popen(
+                [self.binary, *self.args],
+                stdin=subprocess.PIPE if self.stdin is not None else None,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except FileNotFoundError:
+            print(f'{self.binary}: No such file or directory.',
+                  decorations=(Fore.RED,))
+            return TestResult.ERROR
+
         if self.stdin is not None:
             process.stdin.write(self.stdin.encode())
             process.stdin.close()
@@ -157,7 +176,7 @@ class TestCase:
         except subprocess.TimeoutExpired:
             print('⏱  sh'
                   'TIMEOUT', decorations=(Style.BRIGHT, Fore.RED))
-            return False
+            return TestResult.FAILURE
 
         stdout = process.stdout.read().decode()
         stderr = process.stderr.read().decode()
@@ -166,7 +185,7 @@ class TestCase:
         return self.__run_assertions(stdout, stderr, exit_code)
 
     def __run_assertions(self, stdout: str, stderr: str,
-                         exit_code: int) -> bool:
+                         exit_code: int) -> TestResult:
         passing = True
 
         # I use & instead of `and` because I don't want any assertion skipped
@@ -194,7 +213,7 @@ class TestCase:
                      f'got {decorate(actual, Fore.RED)}'
             )
 
-        return passing
+        return TestResult.SUCCESS if passing else TestResult.FAILURE
 
 
 @dataclass
@@ -227,6 +246,9 @@ class TestSuite:
         :return: Returns 0 if all tests succeeded, else 1
         """
 
+        print(f"- Running test suite '{self.name}':\n",
+              decorations=(Style.BRIGHT, Fore.LIGHTBLUE_EX))
+
         total = len(self.tests)
         exit_code = 0
         for no, test in enumerate(self.tests):
@@ -240,18 +262,23 @@ class TestSuite:
                 continue
 
             io.disable_stdout()
-            success = test.run(self.verbose)
+            result = test.run(self.verbose)
             test_output = sys.stdout.read()
             io.enable_stdout()
 
-            if success:
-                print(decorate('OK', Style.BRIGHT, Fore.LIGHTGREEN_EX))
-            else:
-                print(decorate('KO', Style.BRIGHT, Fore.LIGHTRED_EX))
-                print(test_output)
-                if self.fatal:
-                    raise InterruptedError()
-                exit_code = 1
+            match result:
+                case TestResult.SUCCESS:
+                    print('OK', decorations=(Style.BRIGHT, Fore.LIGHTGREEN_EX))
+                case TestResult.FAILURE:
+                    print('KO', decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
+                    print(test_output)
+                    if self.fatal:
+                        raise InterruptedError()
+                    exit_code = 1
+                case TestResult.ERROR:
+                    print('INTERNAL ERROR',
+                          decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
+                    print(test_output)
         return exit_code
 
 
@@ -264,9 +291,12 @@ def get_testsuites() -> List[TestSuite]:
 
     # 1- Parse the command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test-file', type=pathlib.Path, required=True,
-                        help='path to the yaml test file')
-    parser.add_argument('--verbose', type=bool, required=False, default=False)
+    parser.add_argument('--test-file', '-f',
+                        type=pathlib.Path, required=True,
+                        help='Path to the yaml test file.')
+    parser.add_argument('--verbose', '-v',
+                        type=bool, required=False, default=False,
+                        help='Runs verbosely.')
 
     cmd_args = parser.parse_args()
 
@@ -282,7 +312,8 @@ def get_testsuites() -> List[TestSuite]:
     testsuites = []
     defaults = yaml_content['default']
     for yaml_testsuite in yaml_content['testsuites']:
-        yaml_testsuite['tests'] = [TestCase(**(defaults | test)) for test in yaml_testsuite['tests']]
+        yaml_testsuite['tests'] = [TestCase(**(defaults | test)) for test in
+                                   yaml_testsuite['tests']]
         testsuite = TestSuite(**yaml_testsuite)
         testsuites.append(testsuite)
 
