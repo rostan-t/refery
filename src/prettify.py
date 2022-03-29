@@ -1,7 +1,10 @@
+import re
 from difflib import unified_diff
 from typing import Optional, Callable, TypeVar, Type, Iterable, IO
 
 from colorama.ansi import AnsiCodes, Fore, Style
+
+_ANSI_decorations = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
 
 
 def __get_diff_color(line: str) -> Optional[str]:
@@ -21,6 +24,10 @@ def decorate(input: str, *decorations: Optional[Iterable[AnsiCodes]]) -> str:
 
     prefix = ''.join(map(str, filter(lambda dec: dec is not None, decorations)))
     return f'{prefix}{input}{Fore.RESET}{Style.RESET_ALL}'
+
+
+def remove_decorations(input: str) -> str:
+    return re.sub(_ANSI_decorations, '', input)
 
 
 def pretty_diff(actual: str, expected: str) -> str:

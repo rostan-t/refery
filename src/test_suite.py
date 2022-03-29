@@ -1,17 +1,21 @@
 import argparse
 import enum
 import pathlib
+import re
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional
 
+import junit_xml as jxml
 import yaml
 from colorama import Fore, Style
 
 import src.custom_io as io
-from src.prettify import print, decorate, pretty_assert, pretty_diff
+from src.prettify import print, decorate, pretty_assert, pretty_diff, \
+    remove_decorations
 
 
 class OutputMode(Enum):
@@ -55,6 +59,7 @@ class TestResult(enum.Enum):
     SUCCESS = 'ok'
     FAILURE = 'ko'
     ERROR = 'error'
+    SKIPPED = 'skipped'
 
 
 @dataclass
@@ -148,6 +153,9 @@ class TestCase:
         :return: A <code>TestResult</code> representing the outcome of the test.
         """
 
+        if self.skipped:
+            return TestResult.SKIPPED
+
         try:
             process = subprocess.Popen(
                 [self.binary, *self.args],
@@ -174,8 +182,8 @@ class TestCase:
         try:
             process.wait(timeout=self.timeout)
         except subprocess.TimeoutExpired:
-            print('⏱  sh'
-                  'TIMEOUT', decorations=(Style.BRIGHT, Fore.RED))
+            print(f'{self.timeout}s timeout exceeded',
+                  decorations=(Style.BRIGHT, Fore.RED))
             return TestResult.FAILURE
 
         stdout = process.stdout.read().decode()
@@ -234,6 +242,9 @@ class TestSuite:
     fatal: bool = False
     verbose: bool = False
 
+    def __post_init__(self):
+        self.junit_test_suite = jxml.TestSuite(name=self.name)
+
     def add_test(self, test: TestCase):
         """Add a test case at the end of the test suite"""
 
@@ -257,32 +268,49 @@ class TestSuite:
             print(f'{no + 1}/{total}', decorate(test.name, Style.BRIGHT),
                   end=f'{" " * (max_name_length - len(test.name))}\t')
 
-            if test.skipped:
-                print(decorate('SKIPPED', Style.BRIGHT, Fore.BLUE))
-                continue
-
             io.disable_stdout()
+            start_time = time.time()
             result = test.run(self.verbose)
+            stop_time = time.time()
+            elapsed_time = (stop_time - start_time) / 1000
             test_output = sys.stdout.read()
             io.enable_stdout()
 
+            jxml_testcase = jxml.TestCase(
+                name=test.name,
+                classname=f'{self.name}.{test.name}',
+                elapsed_sec=elapsed_time,
+            )
             match result:
                 case TestResult.SUCCESS:
                     print('OK', decorations=(Style.BRIGHT, Fore.LIGHTGREEN_EX))
                 case TestResult.FAILURE:
+                    jxml_testcase.add_failure_info(
+                        message='Test failed',
+                        output=remove_decorations(test_output),
+                    )
                     print('KO', decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
                     print(test_output)
                     if self.fatal:
                         raise InterruptedError()
                     exit_code = 1
                 case TestResult.ERROR:
+                    jxml_testcase.add_error_info(
+                        message='Internal error',
+                        output=remove_decorations(test_output),
+                    )
                     print('INTERNAL ERROR',
                           decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
                     print(test_output)
+                case TestResult.SKIPPED:
+                    jxml_testcase.add_error_info(message='Test skipped')
+                    print('SKIPPED', decorations=(Style.BRIGHT, Fore.BLUE))
+            self.junit_test_suite.test_cases.append(jxml_testcase)
+
         return exit_code
 
 
-def get_testsuites() -> List[TestSuite]:
+def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
     """
     Read the arguments from the command line and generate a test suite.
 
@@ -293,10 +321,13 @@ def get_testsuites() -> List[TestSuite]:
     parser = argparse.ArgumentParser()
     parser.add_argument('--test-file', '-f',
                         type=pathlib.Path, required=True,
-                        help='Path to the yaml test file.')
+                        help='Path to the YAML test file.')
     parser.add_argument('--verbose', '-v',
                         type=bool, required=False, default=False,
                         help='Runs verbosely.')
+    parser.add_argument('--junit-file',
+                        type=pathlib.Path, required=False,
+                        help='Path to an JUnit XML file in which to write the output.')
 
     cmd_args = parser.parse_args()
 
@@ -317,4 +348,4 @@ def get_testsuites() -> List[TestSuite]:
         testsuite = TestSuite(**yaml_testsuite)
         testsuites.append(testsuite)
 
-    return testsuites
+    return testsuites, cmd_args.junit_file
