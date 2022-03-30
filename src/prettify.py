@@ -10,6 +10,7 @@ _ANSI_decorations = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
 def __get_diff_color(line: str) -> Optional[str]:
     if line.startswith('+'):
         return Fore.GREEN
+
     elif line.startswith('-'):
         return Fore.RED
     elif line.startswith('@'):
@@ -37,7 +38,7 @@ def pretty_diff(actual: str, expected: str) -> str:
     diff_lines = unified_diff(
         actual_lines,
         expected_lines,
-        fromfile='actual',
+        fromfile='got',
         tofile='expected',
         lineterm='',
     )
@@ -72,11 +73,10 @@ def pretty_assert(name: str, actual: T, expected: T,
     if msg is None:
         return True
 
-    print(f'Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: {msg}')
+    print(f'Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: \n{msg}')
 
     if type is str:
         print()
-        print(pretty_diff(actual=actual, expected=expected))
     else:
         print(f'expected {decorate(expected, Fore.GREEN)}'
               f', got {decorate(actual, Fore.RED)}')

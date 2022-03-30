@@ -156,9 +156,10 @@ class TestCase:
             return TestResult.SKIPPED
 
         try:
+            print(self.binary)
             process = subprocess.Popen(
-                [self.binary, *self.args],
-                stdin=subprocess.PIPE if self.stdin is not None else None,
+                [self.binary, self.args],
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -166,10 +167,6 @@ class TestCase:
             print(f'{self.binary}: No such file or directory.',
                   decorations=(Fore.RED,))
             return TestResult.ERROR
-
-        if self.stdin is not None:
-            process.stdin.write(self.stdin.encode())
-            process.stdin.close()
 
         if verbose:
             print('testing:', decorations=(Style.DIM,))
@@ -179,17 +176,16 @@ class TestCase:
                 self._print_command(self.ref, self.args)
 
         try:
-            process.wait(timeout=self.timeout)
+            (stdout, stderr) = process.communicate(self.stdin.encode() if self.stdin else None)
         except subprocess.TimeoutExpired:
+            process.kill()
             print(f'{self.timeout}s timeout exceeded',
                   decorations=(Style.BRIGHT, Fore.RED))
             return TestResult.FAILURE
 
-        stdout = process.stdout.read().decode()
-        stderr = process.stderr.read().decode()
         exit_code = process.returncode
 
-        return self.__run_assertions(stdout, stderr, exit_code)
+        return self.__run_assertions(stdout.decode(), stderr.decode(), exit_code)
 
     def __run_assertions(self, stdout: str, stderr: str,
                          exit_code: int) -> TestResult:
