@@ -359,7 +359,6 @@ def get_testsuites():
     testsuites = []
     defaults = yaml_content['default']
     for yaml_testsuite in yaml_content['testsuites']:
-        print(yaml_testsuite['tests'])
         yaml_testsuite['tests'] = [TestCase(**{**defaults, **test}) for test in
                                    yaml_testsuite['tests']]
         testsuite = TestSuite(**yaml_testsuite)
