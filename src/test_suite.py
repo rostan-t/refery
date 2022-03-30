@@ -326,7 +326,7 @@ class TestSuite:
         return exit_code
 
 
-def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
+def get_testsuites():
     """
     Read the arguments from the command line and generate a test suite.
 
@@ -359,7 +359,8 @@ def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
     testsuites = []
     defaults = yaml_content['default']
     for yaml_testsuite in yaml_content['testsuites']:
-        yaml_testsuite['tests'] = [TestCase(**(defaults | test)) for test in
+        print(yaml_testsuite['tests'])
+        yaml_testsuite['tests'] = [TestCase(**{**defaults, **test}) for test in
                                    yaml_testsuite['tests']]
         testsuite = TestSuite(**yaml_testsuite)
         testsuites.append(testsuite)
