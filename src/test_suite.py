@@ -154,7 +154,6 @@ class TestCase:
 
         if self.skipped:
             return TestResult.SKIPPED
-        print(self)
         try:
             process = subprocess.Popen(
                 [self.binary, *self.args],
