@@ -1,7 +1,6 @@
 import argparse
 import enum
 import pathlib
-import re
 import subprocess
 import sys
 import time
@@ -231,19 +230,33 @@ class TestSuite:
 
     Arguments
     ---------
-        name     Name of the test suite.
-        tests    List of test cases.
-        fatal    Indicates if a failure in a test case means an abortion of the runner - defaults to false.
-        verbose  Indicates if the output must be verbose - defaults to false.
+        name      Name of the test suite.
+        tests     List of test cases.
+        setup     (optional) Command to execute before each test case.
+        teardown  (optional) Command to execute after each test case.
+        fatal     Indicates if a failure in a test case means an abortion of the runner - defaults to false.
+        verbose   Indicates if the output must be verbose - defaults to false.
     """
 
     name: str
     tests: List[TestCase] = field(default_factory=lambda: [])
+
+    setup: Optional[str] = None
+    teardown: Optional[str] = None
+
     fatal: bool = False
     verbose: bool = False
 
     def __post_init__(self):
         self.junit_test_suite = jxml.TestSuite(name=self.name)
+
+    def __setup(self):
+        if self.setup is not None:
+            subprocess.run(self.setup.split())
+
+    def __teardown(self):
+        if self.teardown is not None:
+            subprocess.run(self.teardown.split())
 
     def add_test(self, test: TestCase):
         """Add a test case at the end of the test suite"""
@@ -270,7 +283,11 @@ class TestSuite:
 
             io.disable_stdout()
             start_time = time.time()
+
+            self.__setup()
             result = test.run(self.verbose)
+            self.__teardown()
+
             stop_time = time.time()
             elapsed_time = (stop_time - start_time) / 1000
             test_output = sys.stdout.read()
