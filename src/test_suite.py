@@ -156,7 +156,6 @@ class TestCase:
             return TestResult.SKIPPED
 
         try:
-            print(self.binary)
             process = subprocess.Popen(
                 [self.binary, self.args],
                 stdin=subprocess.PIPE,
