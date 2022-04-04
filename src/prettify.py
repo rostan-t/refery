@@ -36,8 +36,8 @@ def pretty_diff(actual: str, expected: str) -> str:
     expected_lines = expected.replace('\n', '↵\n').splitlines()
 
     diff_lines = unified_diff(
-        actual_lines,
         expected_lines,
+        actual_lines,
         fromfile='got',
         tofile='expected',
         lineterm='',
