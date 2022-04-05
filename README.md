@@ -49,7 +49,7 @@ Each test suite is a YAML mapping which accepts the following fields:
 
 ### Test cases
 
-Each test case is a YAML mapping accepting the following optional fields:
+Each test case is a YAML mapping accepting the following fields:
 
 | Name                        | Description                                                                                                                                                                                                                                                                                                                      | Optional |
 |-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:--------:|
@@ -98,6 +98,7 @@ default:
 
 testsuites:
   - name: hello
+    fatal: true
     tests:
       - name: simple_hello
       - name: hello_with_name
