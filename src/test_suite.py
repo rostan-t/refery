@@ -312,25 +312,25 @@ class TestSuite:
                 if self.verbosity is Verbosity.VERBOSE:
                     print(test_output)
             elif result == TestResult.FAILURE:
-                jxml_testcase.add_failure_info(
-                    message='Test failed',
-                    output=remove_decorations(test_output),
-                )
                 print('KO', decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
                 if self.verbosity is not Verbosity.SILENT:
                     print(test_output)
+                    jxml_testcase.add_failure_info(
+                        message='Test failed',
+                        output=remove_decorations(test_output),
+                    )
                 if self.fatal:
                     raise InterruptedError()
                 exit_code = 1
             elif result == TestResult.ERROR:
-                jxml_testcase.add_error_info(
-                    message='Internal error',
-                    output=remove_decorations(test_output),
-                )
                 print('INTERNAL ERROR',
                       decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
-                if self.verbosity != Verbosity.SILENT:
+                if self.verbosity is not Verbosity.SILENT:
                     print(test_output)
+                    jxml_testcase.add_error_info(
+                        message='Internal error',
+                        output=remove_decorations(test_output),
+                    )
             elif result == TestResult.SKIPPED:
                 jxml_testcase.add_error_info(message='Test skipped')
                 print('SKIPPED', decorations=(Style.BRIGHT, Fore.BLUE))
