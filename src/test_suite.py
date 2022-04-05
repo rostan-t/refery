@@ -61,6 +61,18 @@ class TestResult(enum.Enum):
     SKIPPED = 'skipped'
 
 
+class Verbosity(enum.Enum):
+    """
+    Verbosity of the output.
+    - VERBOSE indicates that everything is printed, including the command executed
+    - SILENT indicates that only the test results i.e. failure/success are printed
+    - NORMAL indicates that everything except the command executed is printed
+    """
+    VERBOSE = 'verbose'
+    SILENT = 'silent'
+    NORMAL = 'normal'
+
+
 @dataclass
 class TestCase:
     """
@@ -142,18 +154,26 @@ class TestCase:
         if len(args) != 0:
             print(end=' ')
             escaped = [arg if ' ' not in arg else f'"{arg}"' for arg in args]
-            print(' '.join(escaped), decorations=decorations)
+            print(' '.join(escaped), decorations=decorations, end='')
+        print()
 
-    def run(self, verbose: bool) -> TestResult:
+    def run(self, verbosity: Verbosity) -> TestResult:
         """
         Run the test case.
 
-        :param verbose: True if the output must be verbose.
+        :param verbosity: Output's verbosity.
         :return: A <code>TestResult</code> representing the outcome of the test.
         """
 
         if self.skipped:
             return TestResult.SKIPPED
+
+        if verbosity is Verbosity.VERBOSE:
+            print('testing:', decorations=(Style.DIM,))
+            self._print_command(self.binary.name, self.args)
+            if self.ref is not None:
+                print('against:', decorations=(Style.DIM,))
+                self._print_command(self.ref, self.args)
 
         try:
             process = subprocess.Popen(
@@ -170,13 +190,6 @@ class TestCase:
         if self.stdin is not None:
             process.stdin.write(self.stdin.encode())
             process.stdin.close()
-
-        if verbose:
-            print('testing:', decorations=(Style.DIM,))
-            self._print_command(self.binary.name, self.args)
-            if self.ref is not None:
-                print('against:', decorations=(Style.DIM,))
-                self._print_command(self.ref, self.args)
 
         try:
             process.wait(timeout=self.timeout)
@@ -230,12 +243,12 @@ class TestSuite:
 
     Arguments
     ---------
-        name      Name of the test suite.
-        tests     List of test cases.
-        setup     (optional) Command to execute before each test case.
-        teardown  (optional) Command to execute after each test case.
-        fatal     Indicates if a failure in a test case means an abortion of the runner - defaults to false.
-        verbose   Indicates if the output must be verbose - defaults to false.
+        name        Name of the test suite.
+        tests       List of test cases.
+        setup       (optional) Command to execute before each test case.
+        teardown    (optional) Command to execute after each test case.
+        fatal       Indicates if a failure in a test case means an abortion of the runner - defaults to false.
+        verbosity   Output's verbosity - defaults to NORMAL
     """
 
     name: str
@@ -245,7 +258,7 @@ class TestSuite:
     teardown: Optional[str] = None
 
     fatal: bool = False
-    verbose: bool = False
+    verbosity: Verbosity = Verbosity.NORMAL
 
     def __post_init__(self):
         self.junit_test_suite = jxml.TestSuite(name=self.name)
@@ -285,7 +298,7 @@ class TestSuite:
             start_time = time.time()
 
             self.__setup()
-            result = test.run(self.verbose)
+            result = test.run(self.verbosity)
             self.__teardown()
 
             stop_time = time.time()
@@ -306,7 +319,8 @@ class TestSuite:
                     output=remove_decorations(test_output),
                 )
                 print('KO', decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
-                print(test_output)
+                if self.verbosity is not Verbosity.SILENT:
+                    print(test_output)
                 if self.fatal:
                     raise InterruptedError()
                 exit_code = 1
@@ -317,7 +331,8 @@ class TestSuite:
                 )
                 print('INTERNAL ERROR',
                       decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
-                print(test_output)
+                if self.verbosity != Verbosity.SILENT:
+                    print(test_output)
             elif result == TestResult.SKIPPED:
                 jxml_testcase.add_error_info(message='Test skipped')
                 print('SKIPPED', decorations=(Style.BRIGHT, Fore.BLUE))
@@ -336,14 +351,16 @@ def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
     # 1- Parse the command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--test-file', '-f',
-                        type=pathlib.Path, required=True,
+                        type=pathlib.Path, required=True, metavar='<path>',
                         help='Path to the YAML test file.')
-    parser.add_argument('--verbose', '-v',
-                        type=bool, required=False, default=False,
-                        help='Runs verbosely.')
+    parser.add_argument('--verbosity',
+                        type=Verbosity, required=False,
+                        default=Verbosity.NORMAL,
+                        metavar=f"<{'|'.join([v.value.lower() for v in Verbosity])}>",
+                        help="Output's verbosity, defaults to 'normal'.")
     parser.add_argument('--junit-file',
-                        type=pathlib.Path, required=False,
-                        help='Path to an JUnit XML file in which to write the output.')
+                        type=pathlib.Path, required=False, metavar='<path>',
+                        help='Optional path to a JUnit XML file in which to write the output.')
 
     cmd_args = parser.parse_args()
 
@@ -361,7 +378,7 @@ def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
     for yaml_testsuite in yaml_content['testsuites']:
         yaml_testsuite['tests'] = [TestCase(**(defaults | test)) for test in
                                    yaml_testsuite['tests']]
-        testsuite = TestSuite(**yaml_testsuite)
+        testsuite = TestSuite(verbosity=cmd_args.verbosity, **yaml_testsuite)
         testsuites.append(testsuite)
 
     return testsuites, cmd_args.junit_file
