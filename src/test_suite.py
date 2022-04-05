@@ -178,7 +178,7 @@ class TestCase:
         try:
             process = subprocess.Popen(
                 [self.binary, *self.args],
-                stdin=subprocess.PIPE if self.stdin is not None else None,
+                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
@@ -187,22 +187,18 @@ class TestCase:
                   decorations=(Fore.RED,))
             return TestResult.ERROR
 
-        if self.stdin is not None:
-            process.stdin.write(self.stdin.encode())
-            process.stdin.close()
-
         try:
-            process.wait(timeout=self.timeout)
+            stdin = None if self.stdin is None else self.stdin.encode()
+            stdout, stderr = process.communicate(stdin, timeout=self.timeout)
         except subprocess.TimeoutExpired:
             print(f'{self.timeout}s timeout exceeded',
                   decorations=(Style.BRIGHT, Fore.RED))
             return TestResult.FAILURE
 
-        stdout = process.stdout.read().decode()
-        stderr = process.stderr.read().decode()
         exit_code = process.returncode
 
-        return self.__run_assertions(stdout, stderr, exit_code)
+        return self.__run_assertions(stdout.decode(), stderr.decode(),
+                                     exit_code)
 
     def __run_assertions(self, stdout: str, stderr: str,
                          exit_code: int) -> TestResult:
@@ -313,6 +309,8 @@ class TestSuite:
             )
             if result == TestResult.SUCCESS:
                 print('OK', decorations=(Style.BRIGHT, Fore.LIGHTGREEN_EX))
+                if self.verbosity is Verbosity.VERBOSE:
+                    print(test_output)
             elif result == TestResult.FAILURE:
                 jxml_testcase.add_failure_info(
                     message='Test failed',
@@ -341,7 +339,7 @@ class TestSuite:
         return exit_code
 
 
-def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
+def get_testsuites():
     """
     Read the arguments from the command line and generate a test suite.
 
@@ -376,7 +374,7 @@ def get_testsuites() -> tuple[List[TestSuite], pathlib.Path]:
     testsuites = []
     defaults = yaml_content['default']
     for yaml_testsuite in yaml_content['testsuites']:
-        yaml_testsuite['tests'] = [TestCase(**(defaults | test)) for test in
+        yaml_testsuite['tests'] = [TestCase(**{**defaults, **test}) for test in
                                    yaml_testsuite['tests']]
         testsuite = TestSuite(verbosity=cmd_args.verbosity, **yaml_testsuite)
         testsuites.append(testsuite)
