@@ -96,7 +96,7 @@ default:
   ref: bin/hello
   stderr_mode: exists
 
-testcases:
+testsuites:
   - name: hello
     tests:
       - name: simple_hello
@@ -113,3 +113,6 @@ testcases:
           - --bye
           - John Doe
 ```
+
+This defines two test suites, the first containing two test cases and the second
+only one. 
