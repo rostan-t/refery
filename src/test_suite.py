@@ -240,7 +240,7 @@ class TestSuite:
     Arguments
     ---------
         name        Name of the test suite.
-        tests       List of test cases.
+        tests       (optional) List of test cases.
         setup       (optional) Command to execute before each test case.
         teardown    (optional) Command to execute after each test case.
         fatal       Indicates if a failure in a test case means an abortion of the runner - defaults to false.
@@ -348,7 +348,7 @@ def get_testsuites():
 
     # 1- Parse the command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test-file', '-f',
+    parser.add_argument('-f', '--test-file',
                         type=pathlib.Path, required=True, metavar='<path>',
                         help='Path to the YAML test file.')
     parser.add_argument('--verbosity',
@@ -372,7 +372,7 @@ def get_testsuites():
 
     # 3- Setup the tests
     testsuites = []
-    defaults = yaml_content['default']
+    defaults = yaml_content.get('default', {})
     for yaml_testsuite in yaml_content['testsuites']:
         yaml_testsuite['tests'] = [TestCase(**{**defaults, **test}) for test in
                                    yaml_testsuite['tests']]
