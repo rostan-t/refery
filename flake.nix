@@ -17,7 +17,8 @@
             src = ./.;
 
             doCheck = false;
-            propagatedBuildInputs = [ pkgs.python39.pkgs.colorama pkgs.python39.pkgs.pyaml];
+            propagatedBuildInputs = [ pkgs.python39.pkgs.colorama
+            pkgs.python39.pkgs.pyaml pkgs.python39.pkgs.junit-xml];
             meta = with pkgs.lib; {
               homepage = "https://github.com/RostanTabet/refery";
               description = "A simple functional testing tool";
