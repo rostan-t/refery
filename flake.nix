@@ -1,34 +1,30 @@
 {
-  description = "Flake for the Refery package";
+  description = "Refery flake";
 
   inputs = {
     flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    poetry2nix = {
+      url = "github:nix-community/poetry2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, poetry2nix }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs { inherit system; };
-        refery =
-          pkgs.python39Packages.buildPythonPackage rec {
-            pname = "refery";
-            version = "1.0.2";
-
-            src = ./.;
-
-            doCheck = false;
-            propagatedBuildInputs = [ pkgs.python39.pkgs.colorama
-            pkgs.python39.pkgs.pyaml pkgs.python39.pkgs.junit-xml];
-            meta = with pkgs.lib; {
-              homepage = "https://github.com/RostanTabet/refery";
-              description = "A simple functional testing tool";
-              license = licenses.mit;
-              maintainers = with maintainers; [ RostanTabet ];
-            };
-          };
+        pkgs = nixpkgs.legacyPackages.${system};
+        inherit (poetry2nix.lib.mkPoetry2Nix { inherit pkgs; }) mkPoetryApplication;
       in
-        {
-          defaultPackage = refery;
-        }
-    );
+      {
+        packages = {
+          refery = mkPoetryApplication { projectDir = self; };
+          default = self.packages.${system}.refery;
+        };
+
+        devShells.default = pkgs.mkShell {
+          inputsFrom = [ self.packages.${system}.refery ];
+          packages = [ pkgs.poetry ];
+        };
+      });
 }
