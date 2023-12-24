@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "refery"
-version = "2.0.1"
+version = "2.1.0"
 description = "Functional testing tool"
 authors = ["Rostan Tabet <rostan.tabet@gmail.com>"]
 license = "MIT"
