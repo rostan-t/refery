@@ -12,9 +12,14 @@ import junit_xml as jxml
 import yaml
 from colorama import Fore, Style
 
-import src.custom_io as io
-from src.prettify import print, decorate, pretty_assert, pretty_diff, \
-    remove_decorations
+import refery.custom_io as io
+from refery.prettify import (
+    print,
+    decorate,
+    pretty_assert,
+    pretty_diff,
+    remove_decorations,
+)
 
 
 class OutputMode(Enum):
@@ -28,8 +33,8 @@ class OutputMode(Enum):
                   nothing was expected.
     """
 
-    STRICT = 'strict',
-    EXISTS = 'exists',
+    STRICT = ("strict",)
+    EXISTS = ("exists",)
 
     def compare_outputs(self, expected: str, actual: str) -> Optional[str]:
         """
@@ -40,10 +45,14 @@ class OutputMode(Enum):
         :return: Returns string containing the reason for failure if the comparison fails, else <code>None</code>.
         """
 
-        if self.value[0] == 'exists':
-            return 'expected nothing, got something' if expected == '' and actual != '' \
-                else 'expected something, got nothing' if expected != '' and actual == '' \
+        if self.value[0] == "exists":
+            return (
+                "expected nothing, got something"
+                if expected == "" and actual != ""
+                else "expected something, got nothing"
+                if expected != "" and actual == ""
                 else None
+            )
 
         return None if expected == actual else pretty_diff(actual, expected)
 
@@ -55,10 +64,11 @@ class TestResult(enum.Enum):
     - FAILURE indicates that the test failed.
     - ERROR indicates that an internal error occured.
     """
-    SUCCESS = 'ok'
-    FAILURE = 'ko'
-    ERROR = 'error'
-    SKIPPED = 'skipped'
+
+    SUCCESS = "ok"
+    FAILURE = "ko"
+    ERROR = "error"
+    SKIPPED = "skipped"
 
 
 class Verbosity(enum.Enum):
@@ -68,9 +78,10 @@ class Verbosity(enum.Enum):
     - SILENT indicates that only the test results i.e. failure/success are printed
     - NORMAL indicates that everything except the command executed is printed
     """
-    VERBOSE = 'verbose'
-    SILENT = 'silent'
-    NORMAL = 'normal'
+
+    VERBOSE = "verbose"
+    SILENT = "silent"
+    NORMAL = "normal"
 
 
 @dataclass
@@ -126,19 +137,22 @@ class TestCase:
                 [ref, *self.args],
                 stdin=subprocess.PIPE if self.stdin is not None else None,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                stderr=subprocess.PIPE,
             )
             if self.stdin is not None:
                 process.stdin.write(self.stdin.encode())
                 process.stdin.close()
             process.wait()
 
-            self.stdout = process.stdout.read().decode() \
-                if self.stdout is None else self.stdout
-            self.stderr = process.stderr.read().decode() \
-                if self.stderr is None else self.stderr
-            self.exit_code = process.returncode \
-                if self.exit_code is None else self.exit_code
+            self.stdout = (
+                process.stdout.read().decode() if self.stdout is None else self.stdout
+            )
+            self.stderr = (
+                process.stderr.read().decode() if self.stderr is None else self.stderr
+            )
+            self.exit_code = (
+                process.returncode if self.exit_code is None else self.exit_code
+            )
 
     @staticmethod
     def _print_command(name: str, args: List[str]):
@@ -150,11 +164,11 @@ class TestCase:
         """
 
         decorations = (Style.DIM,)
-        print('$', name, end='\t', decorations=decorations)
+        print("$", name, end="\t", decorations=decorations)
         if len(args) != 0:
-            print(end=' ')
-            escaped = [arg if ' ' not in arg else f'"{arg}"' for arg in args]
-            print(' '.join(escaped), decorations=decorations, end='')
+            print(end=" ")
+            escaped = [arg if " " not in arg else f'"{arg}"' for arg in args]
+            print(" ".join(escaped), decorations=decorations, end="")
         print()
 
     def run(self, verbosity: Verbosity) -> TestResult:
@@ -169,10 +183,10 @@ class TestCase:
             return TestResult.SKIPPED
 
         if verbosity is Verbosity.VERBOSE:
-            print('testing:', decorations=(Style.DIM,))
+            print("testing:", decorations=(Style.DIM,))
             self._print_command(self.binary.name, self.args)
             if self.ref is not None:
-                print('against:', decorations=(Style.DIM,))
+                print("against:", decorations=(Style.DIM,))
                 self._print_command(self.ref, self.args)
 
         try:
@@ -183,50 +197,50 @@ class TestCase:
                 stderr=subprocess.PIPE,
             )
         except FileNotFoundError:
-            print(f'{self.binary}: No such file or directory.',
-                  decorations=(Fore.RED,))
+            print(f"{self.binary}: No such file or directory.", decorations=(Fore.RED,))
             return TestResult.ERROR
 
         try:
             stdin = None if self.stdin is None else self.stdin.encode()
             stdout, stderr = process.communicate(stdin, timeout=self.timeout)
         except subprocess.TimeoutExpired:
-            print(f'{self.timeout}s timeout exceeded',
-                  decorations=(Style.BRIGHT, Fore.RED))
+            print(
+                f"{self.timeout}s timeout exceeded",
+                decorations=(Style.BRIGHT, Fore.RED),
+            )
             return TestResult.FAILURE
 
         exit_code = process.returncode
 
-        return self.__run_assertions(stdout.decode(), stderr.decode(),
-                                     exit_code)
+        return self.__run_assertions(stdout.decode(), stderr.decode(), exit_code)
 
-    def __run_assertions(self, stdout: str, stderr: str,
-                         exit_code: int) -> TestResult:
+    def __run_assertions(self, stdout: str, stderr: str, exit_code: int) -> TestResult:
         passing = True
 
         # I use & instead of `and` because I don't want any assertion skipped
         if self.stdout is not None:
             passing &= pretty_assert(
-                'standard outputs',
+                "standard outputs",
                 actual=stdout,
                 expected=self.stdout,
-                compare=self.stdout_mode.compare_outputs
+                compare=self.stdout_mode.compare_outputs,
             )
         if self.stderr is not None:
             passing &= pretty_assert(
-                'standard errors',
+                "standard errors",
                 actual=stderr,
                 expected=self.stderr,
-                compare=self.stderr_mode.compare_outputs
+                compare=self.stderr_mode.compare_outputs,
             )
         if self.exit_code is not None:
             passing &= pretty_assert(
-                'exit codes',
+                "exit codes",
                 actual=exit_code,
                 expected=self.exit_code,
-                compare=lambda actual, expected: None if actual == expected
-                else f'expected {decorate(expected, Fore.GREEN)}, '
-                     f'got {decorate(actual, Fore.RED)}'
+                compare=lambda actual, expected: None
+                if actual == expected
+                else f"expected {decorate(expected, Fore.GREEN)}, "
+                f"got {decorate(actual, Fore.RED)}",
             )
 
         return TestResult.SUCCESS if passing else TestResult.FAILURE
@@ -279,16 +293,21 @@ class TestSuite:
         :return: Returns 0 if all tests succeeded, else 1
         """
 
-        print(f"- Running test suite '{self.name}':\n",
-              decorations=(Style.BRIGHT, Fore.LIGHTBLUE_EX))
+        print(
+            f"- Running test suite '{self.name}':\n",
+            decorations=(Style.BRIGHT, Fore.LIGHTBLUE_EX),
+        )
 
         total = len(self.tests)
         exit_code = 0
         for no, test in enumerate(self.tests):
             # used to align everything
             max_name_length = max(len(test.name) for test in self.tests)
-            print(f'{no + 1}/{total}', decorate(test.name, Style.BRIGHT),
-                  end=f'{" " * (max_name_length - len(test.name))}\t')
+            print(
+                f"{no + 1}/{total}",
+                decorate(test.name, Style.BRIGHT),
+                end=f'{" " * (max_name_length - len(test.name))}\t',
+            )
 
             io.disable_stdout()
             start_time = time.time()
@@ -304,36 +323,35 @@ class TestSuite:
 
             jxml_testcase = jxml.TestCase(
                 name=test.name,
-                classname=f'{self.name}.{test.name}',
+                classname=f"{self.name}.{test.name}",
                 elapsed_sec=elapsed_time,
             )
             if result == TestResult.SUCCESS:
-                print('OK', decorations=(Style.BRIGHT, Fore.LIGHTGREEN_EX))
+                print("OK", decorations=(Style.BRIGHT, Fore.LIGHTGREEN_EX))
                 if self.verbosity is Verbosity.VERBOSE:
                     print(test_output)
             elif result == TestResult.FAILURE:
-                print('KO', decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
+                print("KO", decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
                 if self.verbosity is not Verbosity.SILENT:
                     print(test_output)
                     jxml_testcase.add_failure_info(
-                        message='Test failed',
+                        message="Test failed",
                         output=remove_decorations(test_output),
                     )
                 if self.fatal:
                     raise InterruptedError()
                 exit_code = 1
             elif result == TestResult.ERROR:
-                print('INTERNAL ERROR',
-                      decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
+                print("INTERNAL ERROR", decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
                 if self.verbosity is not Verbosity.SILENT:
                     print(test_output)
                     jxml_testcase.add_error_info(
-                        message='Internal error',
+                        message="Internal error",
                         output=remove_decorations(test_output),
                     )
             elif result == TestResult.SKIPPED:
-                jxml_testcase.add_error_info(message='Test skipped')
-                print('SKIPPED', decorations=(Style.BRIGHT, Fore.BLUE))
+                jxml_testcase.add_error_info(message="Test skipped")
+                print("SKIPPED", decorations=(Style.BRIGHT, Fore.BLUE))
             self.junit_test_suite.test_cases.append(jxml_testcase)
 
         return exit_code
@@ -348,22 +366,34 @@ def get_testsuites():
 
     # 1- Parse the command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--test-file',
-                        type=pathlib.Path, required=True, metavar='<path>',
-                        help='Path to the YAML test file.')
-    parser.add_argument('--verbosity',
-                        type=Verbosity, required=False,
-                        default=Verbosity.NORMAL,
-                        metavar=f"<{'|'.join([v.value.lower() for v in Verbosity])}>",
-                        help="Output's verbosity, defaults to 'normal'.")
-    parser.add_argument('--junit-file',
-                        type=pathlib.Path, required=False, metavar='<path>',
-                        help='Optional path to a JUnit XML file in which to write the output.')
+    parser.add_argument(
+        "-f",
+        "--test-file",
+        type=pathlib.Path,
+        required=True,
+        metavar="<path>",
+        help="Path to the YAML test file.",
+    )
+    parser.add_argument(
+        "--verbosity",
+        type=Verbosity,
+        required=False,
+        default=Verbosity.NORMAL,
+        metavar=f"<{'|'.join([v.value.lower() for v in Verbosity])}>",
+        help="Output's verbosity, defaults to 'normal'.",
+    )
+    parser.add_argument(
+        "--junit-file",
+        type=pathlib.Path,
+        required=False,
+        metavar="<path>",
+        help="Optional path to a JUnit XML file in which to write the output.",
+    )
 
     cmd_args = parser.parse_args()
 
     # 2- Read the YAML file
-    with open(cmd_args.test_file.resolve(), 'r') as file:
+    with open(cmd_args.test_file.resolve(), "r") as file:
         try:
             yaml_content = yaml.safe_load(file)
         except yaml.YAMLError as error:
@@ -372,10 +402,11 @@ def get_testsuites():
 
     # 3- Setup the tests
     testsuites = []
-    defaults = yaml_content.get('default', {})
-    for yaml_testsuite in yaml_content['testsuites']:
-        yaml_testsuite['tests'] = [TestCase(**{**defaults, **test}) for test in
-                                   yaml_testsuite['tests']]
+    defaults = yaml_content.get("default", {})
+    for yaml_testsuite in yaml_content["testsuites"]:
+        yaml_testsuite["tests"] = [
+            TestCase(**{**defaults, **test}) for test in yaml_testsuite["tests"]
+        ]
         testsuite = TestSuite(verbosity=cmd_args.verbosity, **yaml_testsuite)
         testsuites.append(testsuite)
 
