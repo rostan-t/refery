@@ -4,8 +4,8 @@ Refery is a functional test tool written in Python.
 
 ## Install
 
-```
-$ ./setup.py install
+```sh
+pip install -U refery
 ```
 
 ## Usage
