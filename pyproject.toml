@@ -5,6 +5,19 @@ description = "Functional testing tool"
 authors = ["Rostan Tabet <rostan.tabet@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+homepage = "https://github.com/RostanTabet/refery"
+repository = "https://github.com/RostanTabet/refery.git"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Utilities",
+]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/RostanTabet/refery/issues"
 
 [tool.poetry.scripts]
 refery = "refery.main:main"
