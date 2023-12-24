@@ -1,6 +1,8 @@
+import sys
+
 import junit_xml
 
-from src.test_suite import get_testsuites
+from refery.test_suite import get_testsuites
 
 
 def main() -> int:
@@ -12,11 +14,11 @@ def main() -> int:
 
     if junit_file is not None:
         junit_testsuites = (t.junit_test_suite for t in testsuites)
-        with open(junit_file, 'w') as file:
+        with open(junit_file, "w") as file:
             file.write(junit_xml.to_xml_report_string(junit_testsuites))
 
     return exit_code
 
 
-if __name__ == '__main__':
-    exit(main())
+if __name__ == "__main__":
+    sys.exit(main())
