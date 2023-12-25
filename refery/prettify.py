@@ -4,16 +4,16 @@ from typing import Optional, Callable, TypeVar, Type, Iterable, IO
 
 from colorama.ansi import AnsiCodes, Fore, Style
 
-_ANSI_decorations = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]')
+_ANSI_decorations = re.compile(r"(\x9B|\x1B\[)[0-?]*[ -/]*[@-~]")
 
 
 def __get_diff_color(line: str) -> Optional[str]:
-    if line.startswith('+'):
+    if line.startswith("+"):
         return Fore.GREEN
 
-    elif line.startswith('-'):
+    elif line.startswith("-"):
         return Fore.RED
-    elif line.startswith('@'):
+    elif line.startswith("@"):
         return Fore.BLUE
     else:
         return None
@@ -23,38 +23,40 @@ def decorate(input: str, *decorations: Optional[Iterable[AnsiCodes]]) -> str:
     if decorations is None or len(decorations) == 0:
         return input
 
-    prefix = ''.join(map(str, filter(lambda dec: dec is not None, decorations)))
-    return f'{prefix}{input}{Fore.RESET}{Style.RESET_ALL}'
+    prefix = "".join(map(str, filter(lambda dec: dec is not None, decorations)))
+    return f"{prefix}{input}{Fore.RESET}{Style.RESET_ALL}"
 
 
 def remove_decorations(input: str) -> str:
-    return re.sub(_ANSI_decorations, '', input)
+    return re.sub(_ANSI_decorations, "", input)
 
 
 def pretty_diff(actual: str, expected: str) -> str:
-    actual_lines = actual.replace('\n', '↵\n').splitlines()
-    expected_lines = expected.replace('\n', '↵\n').splitlines()
+    actual_lines = actual.replace("\n", "↵\n").splitlines()
+    expected_lines = expected.replace("\n", "↵\n").splitlines()
 
     diff_lines = unified_diff(
         expected_lines,
         actual_lines,
-        fromfile='got',
-        tofile='expected',
-        lineterm='',
+        fromfile="got",
+        tofile="expected",
+        lineterm="",
     )
-    colored_lines = [
-        decorate(line, __get_diff_color(line)) for line in diff_lines
-    ]
+    colored_lines = [decorate(line, __get_diff_color(line)) for line in diff_lines]
 
-    return '\n'.join(colored_lines)
+    return "\n".join(colored_lines)
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
-def pretty_assert(name: str, actual: T, expected: T,
-                  compare: Callable[[T, T], Optional[str]],
-                  type: Type = str) -> bool:
+def pretty_assert(
+    name: str,
+    actual: T,
+    expected: T,
+    compare: Callable[[T, T], Optional[str]],
+    type: Type = str,
+) -> bool:
     """
     Execute the `compare` function on `actual` and `expected`
     and pretty-print a report.
@@ -73,13 +75,15 @@ def pretty_assert(name: str, actual: T, expected: T,
     if msg is None:
         return True
 
-    print(f'Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: \n{msg}')
+    print(f"Different {decorate(name, Style.BRIGHT, Fore.BLUE)}: \n{msg}")
 
     if type is str:
         print()
     else:
-        print(f'expected {decorate(expected, Fore.GREEN)}'
-              f', got {decorate(actual, Fore.RED)}')
+        print(
+            f"expected {decorate(expected, Fore.GREEN)}"
+            f", got {decorate(actual, Fore.RED)}"
+        )
 
     return False
 
@@ -87,8 +91,18 @@ def pretty_assert(name: str, actual: T, expected: T,
 __print = print
 
 
-def print(*args, sep: Optional[str] = ' ', end: Optional[str] = '\n',
-          file: Optional[IO] = None, flush: bool = False,
-          decorations: Iterable[str] = ()):
-    __print(*map(lambda arg: decorate(arg, *decorations), args),
-            sep=sep, end=end, file=file, flush=flush)
+def print(
+    *args,
+    sep: Optional[str] = " ",
+    end: Optional[str] = "\n",
+    file: Optional[IO] = None,
+    flush: bool = False,
+    decorations: Iterable[str] = (),
+):
+    __print(
+        *map(lambda arg: decorate(arg, *decorations), args),
+        sep=sep,
+        end=end,
+        file=file,
+        flush=flush,
+    )
