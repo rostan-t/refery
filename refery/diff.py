@@ -1,3 +1,4 @@
+import enum
 from dataclasses import dataclass
 from difflib import unified_diff
 from itertools import filterfalse, islice
@@ -22,12 +23,12 @@ class ValueDiff(Generic[T]):
     actual: T
 
     def __post_init__(self):
-        self.name = f"{escape(self.name)} differ"
+        self.name = escape(self.name)
 
     def __rich__(self) -> RenderableType:
         content = f"Expected [green]{self.expected}[/], got [red]{self.actual}[/]"
 
-        return Panel(content, title=self.name)
+        return Panel(content, title=self.name, title_align="left", border_style="b")
 
 
 @dataclass
@@ -41,7 +42,7 @@ class TextualDiff:
     actual: str
 
     def __post_init__(self):
-        self.name = f"{escape(self.name)} differ"
+        self.name = escape(self.name)
         self.expected = escape(self.expected)
         self.actual = escape(self.actual)
 
@@ -67,6 +68,7 @@ class TextualDiff:
             Group(header, Rule(style=""), *diff_content),
             title=self.name,
             title_align="left",
+            border_style="b",
         )
 
     @staticmethod
@@ -96,26 +98,50 @@ class TextualDiff:
         return " " + line
 
 
-# Useful shortcuts
-def stdout_diff(*, expected: str, actual: str):
-    return TextualDiff(
-        name="Standard outputs",
-        expected=expected,
-        actual=actual,
-    )
+class OutputMode(enum.Enum):
+    """
+    The way the output is tested
+    They are currently two possible modes:
+        - strict: Compare the output with the expected result.
+                  If their is are not the same, stop the test
+        - exists: Fail if their is an expected output but the tested binary
+                  outputs nothing, or if the tested outputs something but
+                  nothing was expected.
+    """
 
+    STRICT = "strict"
+    EXISTS = "exists"
 
-def stderr_diff(*, expected: str, actual: str):
-    return TextualDiff(
-        name="Standard errors",
-        expected=expected,
-        actual=actual,
-    )
+    def compare(
+        self,
+        name: str,
+        expected: str,
+        actual: str,
+    ) -> RenderableType | None:
+        """
+        Compare strings according to the output mode.
 
+        :param diff: Name of the strings being compared -- typically stdout/stderr.
+        :param expected: The expected output.
+        :param actual: The actual output.
+        :return: Returns the appropriate diff if the comparison fails, else None.
+        """
 
-def return_diff(*, expected: T, actual: T):
-    return ValueDiff(
-        name="Return codes",
-        expected=expected,
-        actual=actual,
-    )
+        # If there is no value to compare to, assume a success
+        if expected is None:
+            return None
+
+        match self:
+            case OutputMode.EXISTS:
+                if expected == "" and actual != "":
+                    return ValueDiff(name, expected="nothing", actual="something")
+
+                if expected != "" and actual == "":
+                    return ValueDiff(name, expected="something", actual="nothing")
+
+                return None
+            case OutputMode.STRICT:
+                if expected == actual:
+                    return None
+
+                return TextualDiff(name, expected=expected, actual=actual)

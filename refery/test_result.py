@@ -1,5 +1,5 @@
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
 from rich.console import (
@@ -8,7 +8,9 @@ from rich.console import (
     RenderableType,
     RenderResult,
     escape,
+    group,
 )
+from rich.panel import Panel
 
 
 class TestStatus(enum.Enum):
@@ -49,22 +51,34 @@ class TestStatus(enum.Enum):
 @dataclass
 class TestResult:
     """
-    Result of a test case
+    Result of a test case.
     """
 
     name: str
     status: TestStatus
-    command: str
-    outputs: Iterable[RenderableType]
+    outputs: Iterable[RenderableType] = field(default_factory=lambda: [])
 
     def __post_init__(self):
         self.name = escape(self.name)
 
-    def __rich_console__(
-        self,
-        _console: Console,
-        _options: ConsoleOptions,
-    ) -> RenderResult:
+    def __rich__(self) -> RenderResult:
 
-        yield f"[{self.status.style}]{self.status.icon} [i]{self.name}[/][/]"
+        title = f"[{self.status.style}]{self.status.icon} [b]{self.name}[/][/]"
+
+        panel = Panel(
+            self.grouped_output,
+            title=title,
+            title_align="left",
+            border_style=self.status.style,
+        )
+        children = panel.renderable.renderables
+
+        if children:
+            return panel
+
+        return title
+
+    @property
+    @group()
+    def grouped_output(self):
         yield from self.outputs
