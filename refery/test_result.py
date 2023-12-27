@@ -10,9 +10,9 @@ from rich.panel import Panel
 class Verbosity(enum.Enum):
     """
     Verbosity of the output.
-    - SILENT: only the test results i.e. failure/success are printed
+    - SILENT: only the test results are printed, failures are not expanded
     - NORMAL: everything except the command being executed is printed
-    - VERBOSE: everything is printed, including the command being executed
+    - VERBOSE: everything is printed
     """
 
     SILENT = "silent"
@@ -76,6 +76,9 @@ class TestResult:
 
     def __rich__(self) -> RenderResult:
         title = f"[{self.status.style}]{self.status.icon} [b]{self.name}[/][/]"
+
+        if self.verbosity is Verbosity.SILENT:
+            return title
 
         itered_outputs = iter(self.outputs)
         try:
