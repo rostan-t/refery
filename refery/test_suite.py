@@ -1,6 +1,6 @@
 import argparse
-import enum
 import pathlib
+import shlex
 import subprocess
 import sys
 import time
@@ -12,20 +12,7 @@ import yaml
 from rich.console import Console, escape
 
 from refery.diff import OutputMode, ValueDiff
-from refery.test_result import TestResult, TestStatus
-
-
-class Verbosity(enum.Enum):
-    """
-    Verbosity of the output.
-    - VERBOSE indicates that everything is printed, including the command executed
-    - SILENT indicates that only the test results i.e. failure/success are printed
-    - NORMAL indicates that everything except the command executed is printed
-    """
-
-    VERBOSE = "verbose"
-    SILENT = "silent"
-    NORMAL = "normal"
+from refery.test_result import TestResult, TestStatus, Verbosity
 
 
 @dataclass
@@ -98,11 +85,11 @@ class TestCase:
                 process.returncode if self.exit_code is None else self.exit_code
             )
 
-    def run(self) -> TestResult:
+    def run(self, verbosity: Verbosity) -> TestResult:
         """
         Run the test case.
 
-        :param verbosity: Output's verbosity.
+        :param verbosity: Output verbosity.
         :return: A TestResult representing the outcome of the test.
         """
 
@@ -121,6 +108,7 @@ class TestCase:
                 name=self.name,
                 status=TestStatus.ERROR,
                 outputs=(f"No such file or directory: [b]{self.binary}[/]",),
+                verbosity=verbosity,
             )
 
         try:
@@ -131,12 +119,14 @@ class TestCase:
                 name=self.name,
                 status=TestStatus.FAILURE,
                 outputs=(f"[b]{self.timeout}s[/] timeout exceeded.",),
+                verbosity=verbosity,
             )
         else:
             return self.__run_assertions(
-                stdout.decode(),
-                stderr.decode(),
-                process.returncode,
+                stdout=stdout.decode(),
+                stderr=stderr.decode(),
+                exit_code=process.returncode,
+                verbosity=verbosity,
             )
         finally:
             process.terminate()
@@ -146,7 +136,13 @@ class TestCase:
         stdout: str,
         stderr: str,
         exit_code: int,
+        verbosity: Verbosity,
     ) -> TestResult:
+
+        command = None
+        if verbosity is Verbosity.VERBOSE:
+            command = shlex.join(["./" + self.binary.name] + self.args)
+
         diffs = []
 
         if (
@@ -173,7 +169,13 @@ class TestCase:
             )
 
         status = TestStatus.SUCCESS if not diffs else TestStatus.FAILURE
-        result = TestResult(self.name, status, outputs=diffs)
+        result = TestResult(
+            self.name,
+            status,
+            outputs=diffs,
+            verbosity=verbosity,
+            command=command,
+        )
 
         return result
 
@@ -245,7 +247,7 @@ class TestSuite:
 
             with console.status(f"Running {test.name}"):
                 self.__setup()
-                result = test.run()
+                result = test.run(self.verbosity)
                 self.__teardown()
 
             console.print(result)
