@@ -53,6 +53,8 @@ class TestCase:
     skipped: bool = False
     timeout: Optional[float] = None
 
+    init_error: str | None = None
+
     def __post_init__(self):
         if isinstance(self.binary, str):
             self.binary = pathlib.Path(self.binary).resolve()
@@ -62,18 +64,23 @@ class TestCase:
             self.stderr_mode = OutputMode[self.stderr_mode.upper()]
 
         # The ref overrides undefined outputs
-        if self.ref is not None:
+        if not self.skipped and self.ref is not None:
             ref = pathlib.Path(self.ref).resolve()
-            process = subprocess.Popen(
-                [ref, *self.args],
-                stdin=subprocess.PIPE if self.stdin is not None else None,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-            )
+            try:
+                process = subprocess.Popen(
+                    [ref, *self.args],
+                    stdin=subprocess.PIPE if self.stdin is not None else None,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+            except FileNotFoundError:
+                self.init_error = f"No such file or directory: [b]{self.ref}[/]"
+                return
+
             if self.stdin is not None:
                 process.stdin.write(self.stdin.encode())
                 process.stdin.close()
-            process.wait()
+                process.wait()
 
             self.stdout = (
                 process.stdout.read().decode() if self.stdout is None else self.stdout
@@ -85,6 +92,8 @@ class TestCase:
                 process.returncode if self.exit_code is None else self.exit_code
             )
 
+            process.terminate()
+
     def run(self, verbosity: Verbosity) -> TestResult:
         """
         Run the test case.
@@ -95,6 +104,15 @@ class TestCase:
 
         if self.skipped:
             return TestResult(self.name, TestStatus.SKIPPED)
+
+        if self.init_error is not None:
+            return TestResult(
+                name=self.name,
+                status=TestStatus.ERROR,
+                outputs=(self.init_error,),
+                verbosity=verbosity,
+                command=self.__get_command(verbosity),
+            )
 
         try:
             process = subprocess.Popen(
@@ -109,6 +127,7 @@ class TestCase:
                 status=TestStatus.ERROR,
                 outputs=(f"No such file or directory: [b]{self.binary}[/]",),
                 verbosity=verbosity,
+                command=self.__get_command(verbosity),
             )
 
         try:
@@ -120,6 +139,7 @@ class TestCase:
                 status=TestStatus.FAILURE,
                 outputs=(f"[b]{self.timeout}s[/] timeout exceeded.",),
                 verbosity=verbosity,
+                command=self.__get_command(verbosity),
             )
         else:
             return self.__run_assertions(
@@ -138,11 +158,6 @@ class TestCase:
         exit_code: int,
         verbosity: Verbosity,
     ) -> TestResult:
-
-        command = None
-        if verbosity is Verbosity.VERBOSE:
-            command = shlex.join(["./" + self.binary.name] + self.args)
-
         diffs = []
 
         if (
@@ -174,10 +189,17 @@ class TestCase:
             status,
             outputs=diffs,
             verbosity=verbosity,
-            command=command,
+            command=self.__get_command(verbosity),
         )
 
         return result
+
+    def __get_command(self, verbosity: Verbosity):
+        command = None
+        if verbosity is Verbosity.VERBOSE:
+            command = shlex.join(["./" + self.binary.name] + self.args)
+
+        return command
 
 
 @dataclass
