@@ -5,70 +5,14 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import List, Optional
 
 import junit_xml as jxml
 import yaml
-from colorama import Fore, Style
+from rich.console import Console, escape
 
-import refery.custom_io as io
-from refery.prettify import (
-    print,
-    decorate,
-    pretty_assert,
-    pretty_diff,
-    remove_decorations,
-)
-
-
-class OutputMode(Enum):
-    """
-    The way the output is tested
-    They are currently two possible modes:
-        - strict: Compare the output with the expected result.
-                  If their is are not the same, stop the test
-        - exists: Fail if their is an expected output but the tested binary
-                  outputs nothing, or if the tested outputs something but
-                  nothing was expected.
-    """
-
-    STRICT = ("strict",)
-    EXISTS = ("exists",)
-
-    def compare_outputs(self, expected: str, actual: str) -> Optional[str]:
-        """
-        Compare strings according to the output mode.
-
-        :param expected: The expected output.
-        :param actual: The actual output.
-        :return: Returns string containing the reason for failure if the comparison fails, else <code>None</code>.
-        """
-
-        if self.value[0] == "exists":
-            return (
-                "expected nothing, got something"
-                if expected == "" and actual != ""
-                else "expected something, got nothing"
-                if expected != "" and actual == ""
-                else None
-            )
-
-        return None if expected == actual else pretty_diff(actual, expected)
-
-
-class TestResult(enum.Enum):
-    """
-    Result of a test case.
-    - SUCCESS indicates that the test was successful.
-    - FAILURE indicates that the test failed.
-    - ERROR indicates that an internal error occured.
-    """
-
-    SUCCESS = "ok"
-    FAILURE = "ko"
-    ERROR = "error"
-    SKIPPED = "skipped"
+from refery.diff import OutputMode, ValueDiff
+from refery.test_result import TestResult, TestStatus
 
 
 class Verbosity(enum.Enum):
@@ -154,40 +98,16 @@ class TestCase:
                 process.returncode if self.exit_code is None else self.exit_code
             )
 
-    @staticmethod
-    def _print_command(name: str, args: List[str]):
-        """
-        Print a command execution
-
-        :param name: Name of the command
-        :param args: Arguments passed to the command
-        """
-
-        decorations = (Style.DIM,)
-        print("$", name, end="\t", decorations=decorations)
-        if len(args) != 0:
-            print(end=" ")
-            escaped = [arg if " " not in arg else f'"{arg}"' for arg in args]
-            print(" ".join(escaped), decorations=decorations, end="")
-        print()
-
-    def run(self, verbosity: Verbosity) -> TestResult:
+    def run(self) -> TestResult:
         """
         Run the test case.
 
         :param verbosity: Output's verbosity.
-        :return: A <code>TestResult</code> representing the outcome of the test.
+        :return: A TestResult representing the outcome of the test.
         """
 
         if self.skipped:
-            return TestResult.SKIPPED
-
-        if verbosity is Verbosity.VERBOSE:
-            print("testing:", decorations=(Style.DIM,))
-            self._print_command(self.binary.name, self.args)
-            if self.ref is not None:
-                print("against:", decorations=(Style.DIM,))
-                self._print_command(self.ref, self.args)
+            return TestResult(self.name, TestStatus.SKIPPED)
 
         try:
             process = subprocess.Popen(
@@ -197,53 +117,65 @@ class TestCase:
                 stderr=subprocess.PIPE,
             )
         except FileNotFoundError:
-            print(f"{self.binary}: No such file or directory.", decorations=(Fore.RED,))
-            return TestResult.ERROR
+            return TestResult(
+                name=self.name,
+                status=TestStatus.ERROR,
+                outputs=(f"No such file or directory: [b]{self.binary}[/]",),
+            )
 
         try:
             stdin = None if self.stdin is None else self.stdin.encode()
             stdout, stderr = process.communicate(stdin, timeout=self.timeout)
         except subprocess.TimeoutExpired:
-            print(
-                f"{self.timeout}s timeout exceeded",
-                decorations=(Style.BRIGHT, Fore.RED),
+            return TestResult(
+                name=self.name,
+                status=TestStatus.FAILURE,
+                outputs=(f"[b]{self.timeout}s[/] timeout exceeded.",),
             )
-            return TestResult.FAILURE
-
-        exit_code = process.returncode
-
-        return self.__run_assertions(stdout.decode(), stderr.decode(), exit_code)
-
-    def __run_assertions(self, stdout: str, stderr: str, exit_code: int) -> TestResult:
-        passing = True
-
-        # I use & instead of `and` because I don't want any assertion skipped
-        if self.stdout is not None:
-            passing &= pretty_assert(
-                "standard outputs",
-                actual=stdout,
-                expected=self.stdout,
-                compare=self.stdout_mode.compare_outputs,
+        else:
+            return self.__run_assertions(
+                stdout.decode(),
+                stderr.decode(),
+                process.returncode,
             )
-        if self.stderr is not None:
-            passing &= pretty_assert(
-                "standard errors",
-                actual=stderr,
-                expected=self.stderr,
-                compare=self.stderr_mode.compare_outputs,
+        finally:
+            process.terminate()
+
+    def __run_assertions(
+        self,
+        stdout: str,
+        stderr: str,
+        exit_code: int,
+    ) -> TestResult:
+        diffs = []
+
+        if (
+            diff := self.stdout_mode.compare(
+                "Standard outputs", expected=self.stdout, actual=stdout
             )
-        if self.exit_code is not None:
-            passing &= pretty_assert(
-                "exit codes",
-                actual=exit_code,
-                expected=self.exit_code,
-                compare=lambda actual, expected: None
-                if actual == expected
-                else f"expected {decorate(expected, Fore.GREEN)}, "
-                f"got {decorate(actual, Fore.RED)}",
+        ) is not None:
+            diffs.append(diff)
+
+        if (
+            diff := self.stderr_mode.compare(
+                "Standard errors", expected=self.stderr, actual=stderr
+            )
+        ) is not None:
+            diffs.append(diff)
+
+        if self.exit_code is not None and self.exit_code != exit_code:
+            diffs.append(
+                ValueDiff(
+                    "Return codes",
+                    expected=self.exit_code,
+                    actual=exit_code,
+                )
             )
 
-        return TestResult.SUCCESS if passing else TestResult.FAILURE
+        status = TestStatus.SUCCESS if not diffs else TestStatus.FAILURE
+        result = TestResult(self.name, status, outputs=diffs)
+
+        return result
 
 
 @dataclass
@@ -271,87 +203,62 @@ class TestSuite:
     verbosity: Verbosity = Verbosity.NORMAL
 
     def __post_init__(self):
+        self._console = Console(width=80)
         self.junit_test_suite = jxml.TestSuite(name=self.name)
 
     def __setup(self):
         if self.setup is not None:
-            subprocess.run(self.setup.split())
+            # TODO: Handle errors
+            subprocess.run(self.setup.split(), check=False)
 
     def __teardown(self):
         if self.teardown is not None:
-            subprocess.run(self.teardown.split())
+            subprocess.run(self.teardown.split(), check=False)
 
     def add_test(self, test: TestCase):
         """Add a test case at the end of the test suite"""
 
         self.tests.append(test)
 
-    def run(self):
+    def run(self) -> int:
         """
         Run all the tests in the testsuite
 
         :return: Returns 0 if all tests succeeded, else 1
         """
 
-        print(
-            f"- Running test suite '{self.name}':\n",
-            decorations=(Style.BRIGHT, Fore.LIGHTBLUE_EX),
+        console = self._console
+        console.print()
+
+        title = escape(self.name.title())
+        line_char = "\u2501"
+        console.rule(
+            f"{line_char * 2} {title}",
+            style="default",
+            characters=line_char,
+            align="left",
         )
 
-        total = len(self.tests)
         exit_code = 0
-        for no, test in enumerate(self.tests):
-            # used to align everything
-            max_name_length = max(len(test.name) for test in self.tests)
-            print(
-                f"{no + 1}/{total}",
-                decorate(test.name, Style.BRIGHT),
-                end=f'{" " * (max_name_length - len(test.name))}\t',
-            )
-
-            io.disable_stdout()
+        for test in self.tests:
             start_time = time.time()
 
-            self.__setup()
-            result = test.run(self.verbosity)
-            self.__teardown()
+            with console.status(f"Running {test.name}"):
+                self.__setup()
+                result = test.run()
+                self.__teardown()
+
+            console.print(result)
 
             stop_time = time.time()
             elapsed_time = (stop_time - start_time) / 1000
-            test_output = sys.stdout.read()
-            io.enable_stdout()
 
             jxml_testcase = jxml.TestCase(
                 name=test.name,
                 classname=f"{self.name}.{test.name}",
                 elapsed_sec=elapsed_time,
             )
-            if result == TestResult.SUCCESS:
-                print("OK", decorations=(Style.BRIGHT, Fore.LIGHTGREEN_EX))
-                if self.verbosity is Verbosity.VERBOSE:
-                    print(test_output)
-            elif result == TestResult.FAILURE:
-                print("KO", decorations=(Style.BRIGHT, Fore.LIGHTRED_EX))
-                if self.verbosity is not Verbosity.SILENT:
-                    print(test_output)
-                    jxml_testcase.add_failure_info(
-                        message="Test failed",
-                        output=remove_decorations(test_output),
-                    )
-                if self.fatal:
-                    raise InterruptedError()
-                exit_code = 1
-            elif result == TestResult.ERROR:
-                print("INTERNAL ERROR", decorations=(Style.BRIGHT, Fore.LIGHTYELLOW_EX))
-                if self.verbosity is not Verbosity.SILENT:
-                    print(test_output)
-                    jxml_testcase.add_error_info(
-                        message="Internal error",
-                        output=remove_decorations(test_output),
-                    )
-            elif result == TestResult.SKIPPED:
-                jxml_testcase.add_error_info(message="Test skipped")
-                print("SKIPPED", decorations=(Style.BRIGHT, Fore.BLUE))
+
             self.junit_test_suite.test_cases.append(jxml_testcase)
 
         return exit_code

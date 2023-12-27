@@ -45,7 +45,7 @@ class TestStatus(enum.Enum):
             case TestStatus.ERROR:
                 return "bold red"
             case TestStatus.SKIPPED:
-                return "yellow"
+                return "dim"
 
 
 @dataclass
@@ -62,7 +62,6 @@ class TestResult:
         self.name = escape(self.name)
 
     def __rich__(self) -> RenderResult:
-
         title = f"[{self.status.style}]{self.status.icon} [b]{self.name}[/][/]"
 
         panel = Panel(
